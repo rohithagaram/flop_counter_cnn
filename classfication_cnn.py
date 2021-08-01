@@ -4,6 +4,8 @@ import sys
 import torch
 import torchvision.models as models
 
+from parameter_calculator import calculator 
+
 supported_models = {"alexnet"    : models.alexnet,
                     "resnet50"   : models.resnet50,
                     "vgg16"      :models.vgg16,
@@ -24,6 +26,10 @@ if __name__ == '__main__':
     else:
         ouput_format = open(args.result, 'w')
 
-    net = supported_models[args.model]
+    net = supported_models[args.model]()
+    macs, params = calculator(net,(3,244,244),as_strings=True,print_per_layer_stat=True,ost=ouput_format)
     
+
+    print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+    print('{:<30}  {:<8}'.format('Number of parameters: ', params))
 

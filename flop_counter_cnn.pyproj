@@ -6,7 +6,7 @@
     <ProjectGuid>{4c4ed5ff-cda2-41ed-b615-34ca9e9edd00}</ProjectGuid>
     <ProjectHome />
     <StartupFile>classfication_cnn.py</StartupFile>
-    <SearchPath />
+    <SearchPath>..\flop_counter_cnn</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
@@ -20,6 +20,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="classfication_cnn.py" />
+    <Compile Include="parameter_calculator.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
 </Project>
