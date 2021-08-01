@@ -27,7 +27,7 @@ if __name__ == '__main__':
         ouput_format = open(args.result, 'w')
 
     net = supported_models[args.model]()
-    macs, params = calculator(net,(3,244,244),as_strings=True,print_per_layer_stat=True,ost=ouput_format)
+    macs, params = calculator(net,(3,227,227),as_strings=True,print_per_layer_stat=True,ost=ouput_format)
     
 
     print('{:<30}  {:<8}'.format('Computational complexity: ', macs))

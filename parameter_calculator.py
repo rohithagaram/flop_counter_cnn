@@ -261,8 +261,10 @@ def upsample_flops_counter_hook(module, input, output):
     module.__flops__ += int(output_elements_count)
 
 
-def relu_flops_counter_hook(module, input, output):
-    active_elements_count = output.numel()
+def relu_flops_counter(module, input, output):
+    #this hooks computes the cost for the relu module  
+    #   relu module takes the input and applies the activation on that counts 1 operation for one output pixel
+    active_elements_count = input[0].numel()
     module.__flops__ += int(active_elements_count)
 
 
@@ -274,9 +276,25 @@ def linear_flops_counter_hook(module, input, output):
     module.__flops__ += int(np.prod(input.shape) * output_last_dim + bias_flops)
 
 
-def pool_flops_counter_hook(module, input, output):
+def pool_flops_counter(module, input, output):
+    #this hooks computes the cost for the pool module  
+    #   pool modules take the input and operate over the kerel to output the pixel and each each is formed by the kernla_soze * kernal_size cost
+    #   one way is find the output size from the input size and then add the kernal overhead
+    #   other way is adding the kernal overhead directly on the output itself
+    #   both total_flops and total_flops_fromoutput yields same result 
+
     input = input[0]
-    module.__flops__ += int(np.prod(input.shape))
+    stride = module.stride 
+    kernel_size = module.kernel_size
+
+    input_dims = list(input.shape[2:])
+    input_channels = input.shape[1]
+    flop_per_channel = (((input_dims[0] - kernel_size) // stride ) +1)  \
+                        *(((input_dims[0] - kernel_size) // stride ) +1) \
+                        *(kernel_size * kernel_size)
+    total_flops = flop_per_channel * input_channels
+    total_flops_fromoutput = int(np.prod(output.shape)) * (kernel_size * kernel_size)
+    module.__flops__ += int(total_flops)
 
 
 def bn_flops_counter_hook(module, input, output):
@@ -288,8 +306,14 @@ def bn_flops_counter_hook(module, input, output):
     module.__flops__ += int(batch_flops)
 
 
-def conv_flops_counter_hook(conv_module, input, output):
-    # Can have multiple inputs, getting the first one
+def conv_flops_counter(conv_module, input, output):
+    
+    # this hooks computes the cost for the convulution module  
+    #       first find the inputs channels 
+    #       input_channels/group gives the number of input channels contributing to each filter on the output 
+    #       input_channels_per_filter * number_filter * filter dimesion gives the cost of one pixel on the across all the filters
+    #       input_channels_per_filter * number_filter * filter * output_dimensions gives the cost of all pixels 
+
     input = input[0]
 
     batch_size = input.shape[0]
@@ -300,9 +324,8 @@ def conv_flops_counter_hook(conv_module, input, output):
     out_channels = conv_module.out_channels
     groups = conv_module.groups
 
-    filters_per_channel = out_channels // groups
-    conv_per_position_flops = int(np.prod(kernel_dims)) * \
-        in_channels * filters_per_channel
+    input_channels_per_filter = in_channels // groups
+    conv_per_position_flops = int(np.prod(kernel_dims)) * out_channels * input_channels_per_filter
 
     active_elements_count = batch_size * int(np.prod(output_dims))
 
@@ -465,28 +488,28 @@ def remove_batch_counter_hook_function(module):
 
 MODULES_MAPPING = {
     # convolutions mapping
-    nn.Conv1d: conv_flops_counter_hook,
-    nn.Conv2d: conv_flops_counter_hook,
-    nn.Conv3d: conv_flops_counter_hook,
+    nn.Conv1d: conv_flops_counter,
+    nn.Conv2d: conv_flops_counter,
+    nn.Conv3d: conv_flops_counter,
     # activations mappping
-    nn.ReLU: relu_flops_counter_hook,
-    nn.PReLU: relu_flops_counter_hook,
-    nn.ELU: relu_flops_counter_hook,
-    nn.LeakyReLU: relu_flops_counter_hook,
-    nn.ReLU6: relu_flops_counter_hook,
+    nn.ReLU: relu_flops_counter,
+    nn.PReLU: relu_flops_counter,
+    nn.ELU: relu_flops_counter,
+    nn.LeakyReLU: relu_flops_counter,
+    nn.ReLU6: relu_flops_counter,
     # poolings mapping
-    nn.MaxPool1d: pool_flops_counter_hook,
-    nn.AvgPool1d: pool_flops_counter_hook,
-    nn.AvgPool2d: pool_flops_counter_hook,
-    nn.MaxPool2d: pool_flops_counter_hook,
-    nn.MaxPool3d: pool_flops_counter_hook,
-    nn.AvgPool3d: pool_flops_counter_hook,
-    nn.AdaptiveMaxPool1d: pool_flops_counter_hook,
-    nn.AdaptiveAvgPool1d: pool_flops_counter_hook,
-    nn.AdaptiveMaxPool2d: pool_flops_counter_hook,
-    nn.AdaptiveAvgPool2d: pool_flops_counter_hook,
-    nn.AdaptiveMaxPool3d: pool_flops_counter_hook,
-    nn.AdaptiveAvgPool3d: pool_flops_counter_hook,
+    nn.MaxPool1d: pool_flops_counter,
+    nn.AvgPool1d: pool_flops_counter,
+    nn.AvgPool2d: pool_flops_counter,
+    nn.MaxPool2d: pool_flops_counter,
+    nn.MaxPool3d: pool_flops_counter,
+    nn.AvgPool3d: pool_flops_counter,
+    nn.AdaptiveMaxPool1d: pool_flops_counter,
+    nn.AdaptiveAvgPool1d: pool_flops_counter,
+    nn.AdaptiveMaxPool2d: pool_flops_counter,
+    nn.AdaptiveAvgPool2d: pool_flops_counter,
+    nn.AdaptiveMaxPool3d: pool_flops_counter,
+    nn.AdaptiveAvgPool3d: pool_flops_counter,
     # BNs mapping
     nn.BatchNorm1d: bn_flops_counter_hook,
     nn.BatchNorm2d: bn_flops_counter_hook,
@@ -501,9 +524,9 @@ MODULES_MAPPING = {
     # Upscale mapping
     nn.Upsample: upsample_flops_counter_hook,
     # Deconvolution mapping
-    nn.ConvTranspose1d: conv_flops_counter_hook,
-    nn.ConvTranspose2d: conv_flops_counter_hook,
-    nn.ConvTranspose3d: conv_flops_counter_hook,
+    nn.ConvTranspose1d: conv_flops_counter,
+    nn.ConvTranspose2d: conv_flops_counter,
+    nn.ConvTranspose3d: conv_flops_counter,
     # RNN mapping
     nn.RNN: rnn_flops_counter_hook,
     nn.GRU: rnn_flops_counter_hook,
