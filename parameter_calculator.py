@@ -252,7 +252,10 @@ def empty_flops_counter_hook(module, input, output):
     module.__flops__ += 0
 
 
-def upsample_flops_counter_hook(module, input, output):
+def upsample_flops_counter(module, input, output):
+    #this hooks computes the cost for the upsample module  
+    #   upsample module takes the input  of the size (N,C,D,W,H) and produces new output of the size (N,C,D',W',H') via upsampling by using alogs like 'nearest', 'linear', 'bilinear', 'bicubic'
+    #   total number of the operations needed would be N*C*D'*W'*H
     output_size = output[0]
     batch_size = output_size.shape[0]
     output_elements_count = batch_size
@@ -268,9 +271,12 @@ def relu_flops_counter(module, input, output):
     module.__flops__ += int(active_elements_count)
 
 
-def linear_flops_counter_hook(module, input, output):
+def linear_flops_counter(module, input, output):
+
+    #this hooks computes the cost for the Fully connected layer
+    #   Full connected connectes all the inputs to each one of the node in the output so total operations would be input_node * output_nodes
+    #   if the bias is enabled then we need to add the operations overhead caused by the bais aslo
     input = input[0]
-    # pytorch checks dimensions, so here we don't care much
     output_last_dim = output.shape[-1]
     bias_flops = output_last_dim if module.bias is not None else 0
     module.__flops__ += int(np.prod(input.shape) * output_last_dim + bias_flops)
@@ -296,8 +302,22 @@ def pool_flops_counter(module, input, output):
     total_flops_fromoutput = int(np.prod(output.shape)) * (kernel_size * kernel_size)
     module.__flops__ += int(total_flops)
 
+def avg_pool_flops_counter(module, input, output):
+    #this hooks computes the cost for the avg pool module  
+    #   pool modules take the input and take the avg based on the kenal size which in turn derevied from the output 
+    #   so total operations per channel would be visiting the whole input tensor
+    #   to get the complete count of the operation we need to multiply the operations per channel to number of the channels
 
-def bn_flops_counter_hook(module, input, output):
+    input = input[0]
+    total_flops = int(np.prod(input.shape)) 
+    module.__flops__ += int(total_flops)
+
+
+def bn_flops_counter(module, input, output):
+    #this hooks computes the cost for the batch normalization module  
+    #   batch normalization modules take the input and Applies Batch Normalization over that get the output which as of the same dimension 
+    #   if the affine is true we need to learn the gamman and Beta per channel
+    #   to get the complete count of the operation we need to multiply the total input shape and conditionally gamma beta overhead 
     input = input[0]
 
     batch_flops = np.prod(input.shape)
@@ -342,7 +362,8 @@ def conv_flops_counter(conv_module, input, output):
     conv_module.__flops__ += int(overall_flops)
 
 
-def batch_counter_hook(module, input, output):
+def batch_counter(module, input, output):
+      #this hooks computes the number of mini batches 
     batch_size = 1
     if len(input) > 0:
         # Can have multiple inputs, getting the first one
@@ -476,7 +497,7 @@ def add_batch_counter_hook_function(module):
     if hasattr(module, '__batch_counter_handle__'):
         return
 
-    handle = module.register_forward_hook(batch_counter_hook)
+    handle = module.register_forward_hook(batch_counter)
     module.__batch_counter_handle__ = handle
 
 
@@ -499,30 +520,30 @@ MODULES_MAPPING = {
     nn.ReLU6: relu_flops_counter,
     # poolings mapping
     nn.MaxPool1d: pool_flops_counter,
-    nn.AvgPool1d: pool_flops_counter,
-    nn.AvgPool2d: pool_flops_counter,
+    nn.AvgPool1d: avg_pool_flops_counter,
     nn.MaxPool2d: pool_flops_counter,
+    nn.AvgPool2d: avg_pool_flops_counter,  
     nn.MaxPool3d: pool_flops_counter,
-    nn.AvgPool3d: pool_flops_counter,
+    nn.AvgPool3d: avg_pool_flops_counter,
     nn.AdaptiveMaxPool1d: pool_flops_counter,
-    nn.AdaptiveAvgPool1d: pool_flops_counter,
+    nn.AdaptiveAvgPool1d: avg_pool_flops_counter,
     nn.AdaptiveMaxPool2d: pool_flops_counter,
-    nn.AdaptiveAvgPool2d: pool_flops_counter,
+    nn.AdaptiveAvgPool2d: avg_pool_flops_counter,
     nn.AdaptiveMaxPool3d: pool_flops_counter,
-    nn.AdaptiveAvgPool3d: pool_flops_counter,
+    nn.AdaptiveAvgPool3d: avg_pool_flops_counter,
     # BNs mapping
-    nn.BatchNorm1d: bn_flops_counter_hook,
-    nn.BatchNorm2d: bn_flops_counter_hook,
-    nn.BatchNorm3d: bn_flops_counter_hook,
+    nn.BatchNorm1d: bn_flops_counter,
+    nn.BatchNorm2d: bn_flops_counter,
+    nn.BatchNorm3d: bn_flops_counter,
 
-    nn.InstanceNorm1d: bn_flops_counter_hook,
-    nn.InstanceNorm2d: bn_flops_counter_hook,
-    nn.InstanceNorm3d: bn_flops_counter_hook,
-    nn.GroupNorm: bn_flops_counter_hook,
-    # FC mapping
-    nn.Linear: linear_flops_counter_hook,
+    nn.InstanceNorm1d: bn_flops_counter,
+    nn.InstanceNorm2d: bn_flops_counter,
+    nn.InstanceNorm3d: bn_flops_counter,
+    nn.GroupNorm: bn_flops_counter,
+    # FC Layer
+    nn.Linear: linear_flops_counter,
     # Upscale mapping
-    nn.Upsample: upsample_flops_counter_hook,
+    nn.Upsample: upsample_flops_counter,
     # Deconvolution mapping
     nn.ConvTranspose1d: conv_flops_counter,
     nn.ConvTranspose2d: conv_flops_counter,
